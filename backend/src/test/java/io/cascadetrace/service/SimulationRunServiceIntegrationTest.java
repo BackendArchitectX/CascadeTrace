@@ -66,4 +66,31 @@ class SimulationRunServiceIntegrationTest {
         assertThat(page.totalElements()).isEqualTo(1);
         assertThat(page.items().get(0).finalDeficit()).isEqualTo(120);
     }
+
+    @Test
+    void comparesRunsAndCalculatesArchiveStatistics() {
+        ReplayRequest noAction = new ReplayRequest(
+                List.of(),
+                new ReplaySummary(40, 185, null, 120));
+        ReplayRequest reroute = new ReplayRequest(
+                List.of(new RecordedCommand(0, "reroute", null, 0)),
+                new ReplaySummary(76, null, null, 40));
+
+        var left = runService.record(noAction, verificationService.verify(noAction));
+        var right = runService.record(reroute, verificationService.verify(reroute));
+
+        var comparison = runService.compare(left.id(), right.id());
+        assertThat(comparison.finalDeficitDelta()).isEqualTo(-80);
+        assertThat(comparison.firstStressedDelta()).isEqualTo(36);
+        assertThat(comparison.firstDegradedDelta()).isNull();
+        assertThat(comparison.commandCountDelta()).isEqualTo(1);
+        assertThat(comparison.commandsOnlyInRight()).containsExactly("reroute@0s");
+
+        var stats = runService.stats();
+        assertThat(stats.totalRuns()).isEqualTo(2);
+        assertThat(stats.verifiedRuns()).isEqualTo(2);
+        assertThat(stats.averageFinalDeficit()).isEqualTo(80.0);
+        assertThat(stats.bestFinalDeficit()).isEqualTo(40);
+        assertThat(stats.averageCommandCount()).isEqualTo(0.5);
+    }
 }
