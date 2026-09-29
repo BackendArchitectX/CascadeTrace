@@ -13,6 +13,8 @@ import io.cascadetrace.domain.SimulationRunSummaryResponse;
 import io.cascadetrace.persistence.RunCommandEntity;
 import io.cascadetrace.persistence.SimulationRunEntity;
 import io.cascadetrace.persistence.SimulationRunRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -34,10 +36,21 @@ public class SimulationRunService {
 
     private final SimulationRunRepository repository;
     private final ReplayVerificationService verificationService;
+    private final Counter recordedCounter;
+    private final Counter verifiedCounter;
+    private final Counter mismatchCounter;
+    private final Counter reverifiedCounter;
 
-    public SimulationRunService(SimulationRunRepository repository, ReplayVerificationService verificationService) {
+    public SimulationRunService(
+            SimulationRunRepository repository,
+            ReplayVerificationService verificationService,
+            MeterRegistry meterRegistry) {
         this.repository = repository;
         this.verificationService = verificationService;
+        this.recordedCounter = meterRegistry.counter("cascadetrace.runs.recorded");
+        this.verifiedCounter = meterRegistry.counter("cascadetrace.runs.verified");
+        this.mismatchCounter = meterRegistry.counter("cascadetrace.runs.mismatch");
+        this.reverifiedCounter = meterRegistry.counter("cascadetrace.runs.reverified");
     }
 
     @Transactional
@@ -52,7 +65,14 @@ public class SimulationRunService {
         SimulationRunEntity entity = new SimulationRunEntity(
                 UUID.randomUUID(), SCENARIO_ID, now, request.clientSummary(), evaluation);
         request.commands().forEach(entity::addCommand);
-        return toSummary(repository.save(entity));
+        SimulationRunEntity saved = repository.save(entity);
+        recordedCounter.increment();
+        if (evaluation.verified()) {
+            verifiedCounter.increment();
+        } else {
+            mismatchCounter.increment();
+        }
+        return toSummary(saved);
     }
 
     @Transactional(readOnly = true)
@@ -139,6 +159,7 @@ public class SimulationRunService {
         ReplaySummary clientSummary = clientSummary(entity);
         ReplayEvaluation evaluation = verificationService.verify(new ReplayRequest(commands, clientSummary));
         entity.applyEvaluation(evaluation);
+        reverifiedCounter.increment();
         return toDetail(repository.save(entity));
     }
 
