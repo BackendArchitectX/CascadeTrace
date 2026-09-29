@@ -46,6 +46,16 @@ export type SimulationRunPage = {
   totalPages: number
 }
 
+export type ArchiveStats = {
+  totalRuns: number
+  verifiedRuns: number
+  recoveredRuns: number
+  decisionDebtRuns: number
+  averageFinalDeficit: number
+  bestFinalDeficit: number | null
+  averageCommandCount: number
+}
+
 export type RunCommand = {
   second: number
   commandId: string
@@ -61,6 +71,19 @@ export type SimulationRunDetail = {
   commands: RunCommand[]
   clientSummary: ReplaySummary
   serverEvaluation: ReplayEvaluation
+}
+
+export type RunComparison = {
+  left: SimulationRunDetail
+  right: SimulationRunDetail
+  finalDeficitDelta: number
+  cascadeEventsDelta: number
+  recoveryTimeDelta: number | null
+  firstStressedDelta: number | null
+  firstDegradedDelta: number | null
+  commandCountDelta: number
+  commandsOnlyInLeft: string[]
+  commandsOnlyInRight: string[]
 }
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8080/api/v1'
@@ -90,7 +113,15 @@ export const evaluateReplay = (commands: RecordedCommand[], clientSummary: Repla
 
 export const getRuns = (page = 0, size = 20) => request<SimulationRunPage>(`/runs?page=${page}&size=${size}`, undefined, 4000)
 
+export const getRunStats = () => request<ArchiveStats>('/runs/stats', undefined, 4000)
+
 export const getRun = (id: string) => request<SimulationRunDetail>(`/runs/${encodeURIComponent(id)}`, undefined, 4000)
+
+export const compareRuns = (left: string, right: string) => request<RunComparison>(
+  `/runs/compare?left=${encodeURIComponent(left)}&right=${encodeURIComponent(right)}`,
+  undefined,
+  5000,
+)
 
 export const reverifyRun = (id: string) => request<SimulationRunDetail>(`/runs/${encodeURIComponent(id)}/verify`, {
   method: 'POST',
