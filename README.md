@@ -97,12 +97,39 @@ The browser owns the interactive frame-by-frame simulation so the UI stays respo
 
 Shed Load also creates a delayed Telecom backup-depletion condition at 180s.
 
+## One-step run on Windows
+
+Prerequisite: **Docker Desktop**.
+
+After cloning the repository, double-click:
+
+```text
+RUN-CASCADETRACE.bat
+```
+
+That single launcher:
+
+- starts Docker Desktop automatically when possible
+- builds and starts PostgreSQL
+- builds and starts the Spring Boot backend
+- builds and starts the React/Nginx frontend
+- waits until the application is ready
+- opens `http://localhost:8081` in your browser
+
+You do **not** need separate PowerShell windows for the frontend and backend.
+
+To stop all services while preserving PostgreSQL data, double-click:
+
+```text
+STOP-CASCADETRACE.bat
+```
+
 ## Run with Docker
 
-The quickest full-stack path starts PostgreSQL, Spring Boot, and the React/Nginx frontend together:
+The same full stack can also be started manually with one command:
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
 Open:
@@ -240,6 +267,9 @@ CascadeTrace/
 ├── frontend/                # React + TypeScript simulator + run archive
 ├── docs/                    # Architecture and API notes
 ├── .github/workflows/       # CI
+├── RUN-CASCADETRACE.bat     # Windows one-click launcher
+├── STOP-CASCADETRACE.bat    # Windows one-click shutdown
+├── run.ps1                  # Launcher implementation
 ├── docker-compose.yml
 └── README.md
 ```
