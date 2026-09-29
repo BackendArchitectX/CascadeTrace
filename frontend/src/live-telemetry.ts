@@ -259,15 +259,12 @@ function boot() {
     attributeFilter: ['class'],
   })
 
-  if ('ResizeObserver' in window) {
-    resizeObserver = new ResizeObserver(scheduleUpdate)
-    const map = document.querySelector('.signal-map')
-    const network = document.querySelector('.network')
-    if (map) resizeObserver.observe(map)
-    if (network) resizeObserver.observe(network)
-  } else {
-    window.addEventListener('resize', scheduleUpdate, { passive: true })
-  }
+  resizeObserver = new ResizeObserver(scheduleUpdate)
+  const map = document.querySelector('.signal-map')
+  const network = document.querySelector('.network')
+  if (map) resizeObserver.observe(map)
+  if (network) resizeObserver.observe(network)
+  window.addEventListener('resize', scheduleUpdate, { passive: true })
 
   scheduleUpdate()
 }
