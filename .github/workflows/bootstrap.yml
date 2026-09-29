@@ -1,0 +1,28 @@
+name: Bootstrap CascadeTrace
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - bootstrap_project.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialize project
+        run: python bootstrap_project.py
+      - name: Commit generated project
+        run: |
+          rm -f bootstrap_project.py .github/workflows/bootstrap.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: build CascadeTrace full-stack platform"
+          git push
