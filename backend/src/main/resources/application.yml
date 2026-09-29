@@ -34,3 +34,6 @@ springdoc:
     path: /swagger-ui.html
   api-docs:
     path: /v3/api-docs
+logging:
+  pattern:
+    level: "%5p [corr:%X{correlationId:-none}]"
