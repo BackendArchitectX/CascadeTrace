@@ -1,6 +1,7 @@
 import './live-telemetry.css'
 
 type EdgeSpec = { from: string; to: string }
+type Severity = 'normal' | 'stressed' | 'degraded' | 'critical'
 
 const edges: EdgeSpec[] = [
   { from: 'Power', to: 'Telecom' },
@@ -14,8 +15,19 @@ const edges: EdgeSpec[] = [
 ]
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
+const THRESHOLD_HOLD_MS = 1100
 const slug = (value: string) => value.toLowerCase().replace(/\s+/g, '-')
 const edgeKey = (edge: EdgeSpec) => `${edge.from}->${edge.to}`
+const recentThresholdUntil = new Map<string, number>()
+const previousStatuses = new Map<string, Severity>()
+
+function severityOf(element: Element | null): Severity {
+  if (!element) return 'normal'
+  if (element.classList.contains('status-critical')) return 'critical'
+  if (element.classList.contains('status-degraded')) return 'degraded'
+  if (element.classList.contains('status-stressed')) return 'stressed'
+  return 'normal'
+}
 
 function dependencyGroup(edge: EdgeSpec) {
   const prefix = `${edge.from} to ${edge.to},`
@@ -42,6 +54,7 @@ function ensureHeroSvg(map: HTMLElement) {
   const arrow = document.createElementNS(SVG_NS, 'path')
   arrow.setAttribute('d', 'M0,0 L7,3.5 L0,7 z')
   arrow.setAttribute('class', 'hero-live-arrow')
+  arrow.setAttribute('fill', 'context-stroke')
   marker.appendChild(arrow)
   defs.appendChild(marker)
   svg.appendChild(defs)
@@ -64,6 +77,20 @@ function nodeCenter(mapRect: DOMRect, node: Element) {
     x: rect.left - mapRect.left + rect.width / 2,
     y: rect.top - mapRect.top + rect.height / 2,
   }
+}
+
+function edgeState(edge: EdgeSpec) {
+  const key = edgeKey(edge)
+  const group = dependencyGroup(edge)
+  const thresholdNow = group?.classList.contains('threshold-edge') ?? false
+  if (thresholdNow) recentThresholdUntil.set(key, Date.now() + THRESHOLD_HOLD_MS)
+
+  const thresholdRecent = (recentThresholdUntil.get(key) ?? 0) > Date.now()
+  if (!thresholdRecent) recentThresholdUntil.delete(key)
+
+  const active = Boolean(group?.classList.contains('active-edge') || thresholdNow || thresholdRecent)
+  const target = document.querySelector(`.network .node-${slug(edge.to)}`)
+  return { group, active, thresholdNow, thresholdRecent, severity: severityOf(target) }
 }
 
 function updateHeroNetwork() {
@@ -89,11 +116,8 @@ function updateHeroNetwork() {
     const cy = (a.y + b.y) / 2 + (dx > 0 ? -bend : bend) * 0.2
     path.setAttribute('d', `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`)
 
-    const dependency = dependencyGroup(edge)
-    const active = dependency?.classList.contains('active-edge') ?? false
-    const threshold = dependency?.classList.contains('threshold-edge') ?? false
-    path.classList.toggle('active', active)
-    path.classList.toggle('threshold', threshold)
+    const state = edgeState(edge)
+    path.className.baseVal = `hero-live-edge telemetry-${state.severity}${state.active ? ' active' : ''}${state.thresholdRecent ? ' threshold' : ''}`
   }
 
   const citySignal = map.closest('.city-signal')
@@ -105,6 +129,8 @@ function clearPressureClasses() {
     .forEach((node) => node.classList.remove('sending-pressure', 'receiving-pressure'))
   document.querySelectorAll('.pulse-chip.telemetry-pressure')
     .forEach((chip) => chip.classList.remove('telemetry-pressure'))
+  document.querySelectorAll('.network .edge.telemetry-stressed, .network .edge.telemetry-degraded, .network .edge.telemetry-critical, .network .edge.telemetry-normal, .network .edge.recent-threshold')
+    .forEach((edge) => edge.classList.remove('telemetry-stressed', 'telemetry-degraded', 'telemetry-critical', 'telemetry-normal', 'recent-threshold'))
 }
 
 function pulseChip(system: string) {
@@ -112,19 +138,61 @@ function pulseChip(system: string) {
     .find((chip) => chip.querySelector('span')?.textContent?.trim() === system)
 }
 
+function transitionKey(element: Element, prefix: string, index: number) {
+  const namedClass = [...element.classList].find((name) => name.startsWith(prefix))
+  return namedClass ?? `${prefix}${index}`
+}
+
+function trackStatusTransitions() {
+  const tracked = [
+    ...document.querySelectorAll('.network .node'),
+    ...document.querySelectorAll('.signal-map .signal-node'),
+  ]
+
+  tracked.forEach((element, index) => {
+    const key = transitionKey(element, element.classList.contains('node') ? 'node-' : 'signal-', index)
+    const severity = severityOf(element)
+    const previous = previousStatuses.get(key)
+    previousStatuses.set(key, severity)
+    if (!previous || previous === severity) return
+
+    element.classList.remove('telemetry-transition')
+    requestAnimationFrame(() => element.classList.add('telemetry-transition'))
+    window.setTimeout(() => element.classList.remove('telemetry-transition'), 900)
+  })
+}
+
+function ensureThresholdLegend() {
+  const legend = document.querySelector<HTMLElement>('.network-panel > .legend')
+  if (!legend || legend.querySelector('.legend-threshold-label')) return
+
+  const item = document.createElement('span')
+  item.className = 'legend-threshold-label'
+  item.innerHTML = '<i class="legend-threshold"></i>threshold crossing'
+  legend.appendChild(item)
+}
+
 function updateDependencyNetwork() {
   clearPressureClasses()
-  const active = edges.filter((edge) => {
-    const group = dependencyGroup(edge)
-    return group?.classList.contains('active-edge') || group?.classList.contains('threshold-edge')
-  })
+  let activeCount = 0
 
-  for (const edge of active) {
+  for (const edge of edges) {
+    const state = edgeState(edge)
+    if (!state.group) continue
+
+    state.group.classList.add(`telemetry-${state.severity}`)
+    if (state.thresholdRecent) state.group.classList.add('recent-threshold')
+    if (!state.active) continue
+
+    activeCount += 1
     document.querySelector(`.node-${slug(edge.from)}`)?.classList.add('sending-pressure')
     document.querySelector(`.node-${slug(edge.to)}`)?.classList.add('receiving-pressure')
     pulseChip(edge.from)?.classList.add('telemetry-pressure')
     pulseChip(edge.to)?.classList.add('telemetry-pressure')
   }
+
+  trackStatusTransitions()
+  ensureThresholdLegend()
 
   const network = document.querySelector<HTMLElement>('.network')
   if (!network) return
@@ -133,18 +201,26 @@ function updateDependencyNetwork() {
   if (!meter) {
     meter = document.createElement('div')
     meter.className = 'network-live-meter'
-    meter.innerHTML = '<b>LIVE PROPAGATION</b><span></span>'
+    meter.innerHTML = '<b>LIVE PROPAGATION</b><span></span><small></small>'
     network.appendChild(meter)
   }
 
   const clock = document.querySelector('.clock strong')?.textContent?.trim() ?? '00:00'
   const isLive = Boolean(document.querySelector('.clock i.live'))
   const ended = Boolean(document.querySelector('.clock i.ended'))
+  const atRisk = document.querySelectorAll('.network .node.status-stressed, .network .node.status-degraded, .network .node.status-critical').length
+  const worst: Severity = document.querySelector('.network .node.status-critical') ? 'critical'
+    : document.querySelector('.network .node.status-degraded') ? 'degraded'
+      : document.querySelector('.network .node.status-stressed') ? 'stressed' : 'normal'
+
   meter.classList.toggle('is-live', isLive)
   meter.classList.toggle('is-ended', ended)
-  const state = ended ? 'SEALED' : isLive ? 'STREAMING' : 'STANDBY'
+  meter.dataset.severity = worst
+  const stateLabel = ended ? 'SEALED' : isLive ? 'STREAMING' : 'STANDBY'
   const span = meter.querySelector('span')
-  if (span) span.textContent = `${active.length} ACTIVE PATH${active.length === 1 ? '' : 'S'} · ${clock} · ${state}`
+  const small = meter.querySelector('small')
+  if (span) span.textContent = `${activeCount} ACTIVE PATH${activeCount === 1 ? '' : 'S'} · ${clock} · ${stateLabel}`
+  if (small) small.textContent = `${atRisk} / 6 SYSTEMS AT RISK · WORST ${worst.toUpperCase()}`
 }
 
 let scheduled = false
@@ -163,8 +239,7 @@ function keepLiveCitySignalMounted(event: MouseEvent) {
   const link = target?.closest<HTMLAnchorElement>('.hero-cta')
   if (!link) return
 
-  // The React hero is already backed by the authoritative simulation state.
-  // Prevent the original handler from unmounting it; only perform navigation.
+  // Keep the state-backed city signal mounted while navigating into the simulator.
   event.preventDefault()
   event.stopPropagation()
   const simulator = document.getElementById('simulator')
@@ -172,6 +247,7 @@ function keepLiveCitySignalMounted(event: MouseEvent) {
 }
 
 const observer = new MutationObserver(scheduleUpdate)
+let resizeObserver: ResizeObserver | null = null
 
 function boot() {
   document.addEventListener('click', keepLiveCitySignalMounted, true)
@@ -182,7 +258,17 @@ function boot() {
     characterData: true,
     attributeFilter: ['class'],
   })
-  window.addEventListener('resize', scheduleUpdate, { passive: true })
+
+  if ('ResizeObserver' in window) {
+    resizeObserver = new ResizeObserver(scheduleUpdate)
+    const map = document.querySelector('.signal-map')
+    const network = document.querySelector('.network')
+    if (map) resizeObserver.observe(map)
+    if (network) resizeObserver.observe(network)
+  } else {
+    window.addEventListener('resize', scheduleUpdate, { passive: true })
+  }
+
   scheduleUpdate()
 }
 
