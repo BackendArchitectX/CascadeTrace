@@ -12,7 +12,7 @@ CITY//01 begins with Substation S14 losing **180 MW** during peak demand. The op
 
 ## What makes it different
 
-CascadeTrace is not an LLM dashboard. The simulation is deterministic, replayable, and auditable:
+CascadeTrace is not an LLM dashboard. The simulation is deterministic, replayable, persistent, and auditable:
 
 - **Deterministic engine** — identical commands at identical times reproduce the same outcome.
 - **Live dependency network** — system states and propagation paths update from authoritative simulation state.
@@ -24,6 +24,11 @@ CascadeTrace is not an LLM dashboard. The simulation is deterministic, replayabl
 - **Persistent incident archive** — completed runs and command ledgers are stored in PostgreSQL through Spring Data JPA.
 - **Replay fingerprints** — each replay receives a deterministic SHA-256 fingerprint derived from the command ledger and server outcome.
 - **Server re-verification** — any archived run can be replayed again against the current deterministic Java engine.
+- **Run comparison** — select two archived incidents and compare outcome deltas plus command-ledger differences.
+- **Archive intelligence** — aggregate run count, verification count, average deficit, best deficit, recovery count, debt count, and average command count.
+- **Evidence export** — download a selected archived run as portable JSON and copy its replay fingerprint.
+- **Request traceability** — every API request receives an `X-Correlation-ID` and backend logs include the same correlation identifier.
+- **Operational metrics** — Spring Boot Actuator exposes counters for recorded, verified, mismatched, and re-verified runs.
 
 ## Tech stack
 
@@ -35,7 +40,7 @@ CascadeTrace is not an LLM dashboard. The simulation is deterministic, replayabl
 - PostgreSQL
 - Flyway migrations
 - Jakarta Validation
-- Spring Boot Actuator
+- Spring Boot Actuator / Micrometer
 - Springdoc OpenAPI / Swagger UI
 - JUnit 5 + H2 PostgreSQL-mode integration tests
 - Maven
@@ -46,12 +51,13 @@ CascadeTrace is not an LLM dashboard. The simulation is deterministic, replayabl
 - Vite
 - SVG dependency visualization
 - Responsive CSS / reduced-motion support
-- Persistent Run History interface
+- Persistent Run History / Incident Intelligence interface
 
 ### Delivery
 - Docker / Docker Compose
 - Nginx
 - GitHub Actions CI
+- Windows one-click launcher
 
 ## Architecture
 
@@ -67,7 +73,9 @@ flowchart LR
     API --> J[Java Deterministic Replay Engine]
     J --> V[Verification Service]
     V --> P[(PostgreSQL)]
-    P --> H[Run History / Incident Archive]
+    P --> H[Run History / Incident Intelligence]
+    H --> X[Run Comparison + Evidence Export]
+    API --> M[Actuator / Metrics]
 ```
 
 The browser owns the interactive frame-by-frame simulation so the UI stays responsive. At scenario completion, the same command ledger is independently replayed by Java. The backend verifies the client's stress/degradation timing, recovery, and final deficit, then persists both the evidence and replay fingerprint.
@@ -110,10 +118,12 @@ RUN-CASCADETRACE.bat
 That single launcher:
 
 - starts Docker Desktop automatically when possible
+- detects when CascadeTrace is already running and opens it immediately
 - builds and starts PostgreSQL
 - builds and starts the Spring Boot backend
 - builds and starts the React/Nginx frontend
-- waits until the application is ready
+- waits for both frontend and backend health before opening the browser
+- prints container logs automatically when startup fails
 - opens `http://localhost:8081` in your browser
 
 You do **not** need separate PowerShell windows for the frontend and backend.
@@ -123,6 +133,17 @@ To stop all services while preserving PostgreSQL data, double-click:
 ```text
 STOP-CASCADETRACE.bat
 ```
+
+Advanced launcher options:
+
+```powershell
+.\run.ps1 -NoBuild      # reuse existing Docker images
+.\run.ps1 -OpenArchive  # open the incident archive directly
+.\run.ps1 -NoBrowser    # start services without opening a browser
+.\run.ps1 -ResetData    # rebuild from a clean PostgreSQL volume
+```
+
+`-ResetData` intentionally deletes the local CascadeTrace PostgreSQL Docker volume.
 
 ## Run with Docker
 
@@ -138,6 +159,7 @@ Open:
 - Incident archive: `http://localhost:8081/history.html`
 - API health: `http://localhost:8080/actuator/health`
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
+- Metrics index: `http://localhost:8080/actuator/metrics`
 
 PostgreSQL data is retained in the `cascadetrace-postgres` Docker volume.
 
@@ -202,11 +224,11 @@ cd backend
 mvn test
 ```
 
-Backend tests include deterministic replay tests and persistence/re-verification integration tests using H2 in PostgreSQL compatibility mode.
+Backend tests assert deterministic replay behavior, persistence/re-verification, archive statistics, and stored-run comparison using H2 in PostgreSQL compatibility mode.
 
 ## REST API
 
-### Existing runtime APIs
+### Runtime APIs
 
 - `GET /api/v1/health`
 - `GET /api/v1/scenario`
@@ -217,8 +239,12 @@ Backend tests include deterministic replay tests and persistence/re-verification
 ### Persistent run APIs
 
 - `GET /api/v1/runs?page=0&size=20` — newest runs first
+- `GET /api/v1/runs/stats` — archive-level aggregate metrics
+- `GET /api/v1/runs/compare?left=<uuid>&right=<uuid>` — deterministic stored-run comparison; deltas are `RIGHT - LEFT`
 - `GET /api/v1/runs/{id}` — run evidence + command ledger
 - `POST /api/v1/runs/{id}/verify` — replay and re-verify an archived run
+
+Every API response includes an `X-Correlation-ID`. Clients may provide their own correlation ID header; otherwise the backend generates one.
 
 ### Replay request example
 
@@ -235,6 +261,23 @@ Backend tests include deterministic replay tests and persistence/re-verification
     "finalDeficit": 0
   }
 }
+```
+
+## Operational metrics
+
+Actuator exposes standard JVM/application metrics plus CascadeTrace counters:
+
+```text
+cascadetrace.runs.recorded
+cascadetrace.runs.verified
+cascadetrace.runs.mismatch
+cascadetrace.runs.reverified
+```
+
+Example:
+
+```text
+GET /actuator/metrics/cascadetrace.runs.recorded
 ```
 
 ## Persistence model
@@ -264,9 +307,9 @@ Database changes are versioned with Flyway rather than generated automatically b
 ```text
 CascadeTrace/
 ├── backend/                 # Java + Spring Boot + JPA + PostgreSQL
-├── frontend/                # React + TypeScript simulator + run archive
+├── frontend/                # React + TypeScript simulator + incident intelligence
 ├── docs/                    # Architecture and API notes
-├── .github/workflows/       # CI
+├── .github/workflows/       # CI only; no bot-authored source commits
 ├── RUN-CASCADETRACE.bat     # Windows one-click launcher
 ├── STOP-CASCADETRACE.bat    # Windows one-click shutdown
 ├── run.ps1                  # Launcher implementation
