@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - bootstrap_project.py
+      - '.bootstrap/**'
+      - '.github/workflows/bootstrap.yml'
   workflow_dispatch:
 
 permissions:
@@ -17,10 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Materialize project
-        run: python bootstrap_project.py
+        run: |
+          cat .bootstrap/part-* > /tmp/project.b64
+          echo "Verifying source payload..."
+          test "$(sha256sum /tmp/project.b64 | cut -d' ' -f1)" = "fc9ccd6328826d3de9c66ea97355d43fe74e5f4ccf4ceec2404066ae84e6ed95"
+          base64 -d /tmp/project.b64 > /tmp/project.tar.xz
+          tar -xJf /tmp/project.tar.xz -C .
       - name: Commit generated project
         run: |
-          rm -f bootstrap_project.py .github/workflows/bootstrap.yml
+          rm -rf .bootstrap bootstrap_project.py .github/workflows/bootstrap.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
