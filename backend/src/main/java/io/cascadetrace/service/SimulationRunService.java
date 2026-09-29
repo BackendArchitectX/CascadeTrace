@@ -1,10 +1,12 @@
 package io.cascadetrace.service;
 
+import io.cascadetrace.domain.ArchiveStatsResponse;
 import io.cascadetrace.domain.RecordedCommand;
 import io.cascadetrace.domain.ReplayEvaluation;
 import io.cascadetrace.domain.ReplayRequest;
 import io.cascadetrace.domain.ReplaySummary;
 import io.cascadetrace.domain.RunCommandResponse;
+import io.cascadetrace.domain.RunComparisonResponse;
 import io.cascadetrace.domain.SimulationRunDetailResponse;
 import io.cascadetrace.domain.SimulationRunPageResponse;
 import io.cascadetrace.domain.SimulationRunSummaryResponse;
@@ -19,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -65,8 +69,67 @@ public class SimulationRunService {
     }
 
     @Transactional(readOnly = true)
+    public ArchiveStatsResponse stats() {
+        List<SimulationRunEntity> runs = repository.findAll();
+        if (runs.isEmpty()) {
+            return new ArchiveStatsResponse(0, 0, 0, 0, 0.0, null, 0.0);
+        }
+
+        long verifiedRuns = runs.stream().filter(SimulationRunEntity::isVerified).count();
+        long recoveredRuns = runs.stream().filter(run -> run.getRecoveryTime() != null).count();
+        long decisionDebtRuns = runs.stream().filter(SimulationRunEntity::isDecisionDebt).count();
+        double averageFinalDeficit = runs.stream().mapToInt(SimulationRunEntity::getFinalDeficit).average().orElse(0.0);
+        Integer bestFinalDeficit = runs.stream().mapToInt(SimulationRunEntity::getFinalDeficit).min().orElse(0);
+        double averageCommandCount = runs.stream().mapToInt(SimulationRunEntity::getCommandCount).average().orElse(0.0);
+
+        return new ArchiveStatsResponse(
+                runs.size(),
+                verifiedRuns,
+                recoveredRuns,
+                decisionDebtRuns,
+                averageFinalDeficit,
+                bestFinalDeficit,
+                averageCommandCount);
+    }
+
+    @Transactional(readOnly = true)
     public SimulationRunDetailResponse get(UUID id) {
         return toDetail(findDetail(id));
+    }
+
+    @Transactional(readOnly = true)
+    public RunComparisonResponse compare(UUID leftId, UUID rightId) {
+        if (leftId.equals(rightId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose two different simulation runs");
+        }
+
+        SimulationRunEntity leftEntity = findDetail(leftId);
+        SimulationRunEntity rightEntity = findDetail(rightId);
+        if (!leftEntity.getScenarioId().equals(rightEntity.getScenarioId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Simulation runs belong to different scenarios");
+        }
+
+        SimulationRunDetailResponse left = toDetail(leftEntity);
+        SimulationRunDetailResponse right = toDetail(rightEntity);
+        Set<String> leftCommands = new LinkedHashSet<>(commandKeys(leftEntity));
+        Set<String> rightCommands = new LinkedHashSet<>(commandKeys(rightEntity));
+
+        Set<String> onlyLeft = new LinkedHashSet<>(leftCommands);
+        onlyLeft.removeAll(rightCommands);
+        Set<String> onlyRight = new LinkedHashSet<>(rightCommands);
+        onlyRight.removeAll(leftCommands);
+
+        return new RunComparisonResponse(
+                left,
+                right,
+                right.serverEvaluation().finalDeficit() - left.serverEvaluation().finalDeficit(),
+                right.serverEvaluation().cascadeEvents() - left.serverEvaluation().cascadeEvents(),
+                nullableDelta(right.serverEvaluation().recoveryTime(), left.serverEvaluation().recoveryTime()),
+                nullableDelta(right.serverEvaluation().firstStressed(), left.serverEvaluation().firstStressed()),
+                nullableDelta(right.serverEvaluation().firstDegraded(), left.serverEvaluation().firstDegraded()),
+                right.commandCount() - left.commandCount(),
+                List.copyOf(onlyLeft),
+                List.copyOf(onlyRight));
     }
 
     @Transactional
@@ -139,5 +202,17 @@ public class SimulationRunService {
                 command.getCommandId(),
                 command.getReportId(),
                 command.getInsertionOrder());
+    }
+
+    private List<String> commandKeys(SimulationRunEntity entity) {
+        return entity.getCommands().stream()
+                .map(command -> command.getCommandId()
+                        + (command.getReportId() == null ? "" : ":" + command.getReportId())
+                        + "@" + command.getSecond() + "s")
+                .toList();
+    }
+
+    private Integer nullableDelta(Integer right, Integer left) {
+        return right == null || left == null ? null : right - left;
     }
 }
