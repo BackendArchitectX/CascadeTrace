@@ -2,26 +2,28 @@
 
 **Critical Infrastructure Cascade Simulator · CITY//01**
 
-A deterministic critical-infrastructure cascade simulator built as a **Java full-stack application** with a **Spring Boot verification API** and a **React + TypeScript operational interface**.
+CascadeTrace is a deterministic critical-infrastructure incident simulator built as a **Java full-stack application** with a **Spring Boot backend**, **PostgreSQL persistence**, and a **React + TypeScript operational interface**.
 
 > **Every decision changes what happens next.**
 
-CITY//01 begins with Substation S14 losing **180 MW** during peak demand. The player has a compressed 60-second response window to intervene across a dependency graph spanning Power, Telecom, Traffic, Water, Hospital, and Emergency Services.
+CITY//01 begins with Substation S14 losing **180 MW** during peak demand. The operator has a compressed 60-second response window to intervene across a dependency graph spanning Power, Telecom, Traffic, Water, Hospital, and Emergency Services.
 
 > **Scope:** CascadeTrace is an engineering simulation and portfolio project. It is not intended to control or advise real critical infrastructure.
 
 ## What makes it different
 
-CascadeTrace is not an LLM dashboard. The simulation is deterministic and auditable:
+CascadeTrace is not an LLM dashboard. The simulation is deterministic, replayable, and auditable:
 
 - **Deterministic engine** — identical commands at identical times reproduce the same outcome.
-- **Live dependency network** — system states and propagation paths update from simulation state.
+- **Live dependency network** — system states and propagation paths update from authoritative simulation state.
 - **Decision debt** — an intervention can solve the immediate problem while creating delayed consequences.
 - **Causal X-Ray** — threshold crossings are explained using recorded provenance.
 - **FORKLINE** — replay a decision branch and compare alternate outcomes.
-- **After Action Review** — evidence-based final deficit, cascade events, recovery, completed decisions, verified intelligence, and debt.
-- **Independent Java replay verification** — the Spring Boot backend replays the client command sequence and verifies the final deterministic summary.
-- **Replay fingerprints** — verified runs receive a deterministic SHA-256 fingerprint derived from the command ledger and server outcome.
+- **After Action Review** — evidence-based deficit, cascades, recovery, completed decisions, verified intelligence, and debt.
+- **Independent Java replay verification** — Spring Boot replays the exact client command ledger and verifies the final deterministic summary.
+- **Persistent incident archive** — completed runs and command ledgers are stored in PostgreSQL through Spring Data JPA.
+- **Replay fingerprints** — each replay receives a deterministic SHA-256 fingerprint derived from the command ledger and server outcome.
+- **Server re-verification** — any archived run can be replayed again against the current deterministic Java engine.
 
 ## Tech stack
 
@@ -29,8 +31,13 @@ CascadeTrace is not an LLM dashboard. The simulation is deterministic and audita
 - Java 17
 - Spring Boot 3
 - Spring Web / REST APIs
+- Spring Data JPA / Hibernate
+- PostgreSQL
+- Flyway migrations
 - Jakarta Validation
-- JUnit 5
+- Spring Boot Actuator
+- Springdoc OpenAPI / Swagger UI
+- JUnit 5 + H2 PostgreSQL-mode integration tests
 - Maven
 
 ### Frontend
@@ -38,12 +45,14 @@ CascadeTrace is not an LLM dashboard. The simulation is deterministic and audita
 - TypeScript
 - Vite
 - SVG dependency visualization
-- CSS responsive design / reduced-motion support
+- Responsive CSS / reduced-motion support
+- Persistent Run History interface
 
 ### Delivery
 - Docker / Docker Compose
 - Nginx
 - GitHub Actions CI
+- Dependabot
 
 ## Architecture
 
@@ -55,24 +64,20 @@ flowchart LR
     E --> C[Causal X-Ray]
     E --> F[FORKLINE]
     E --> A[After Action Review]
-    R -->|commands + local summary| API[Spring Boot REST API]
+    R -->|command ledger + local summary| API[Spring Boot REST API]
     API --> J[Java Deterministic Replay Engine]
-    J -->|verification result| R
+    J --> V[Verification Service]
+    V --> P[(PostgreSQL)]
+    P --> H[Run History / Incident Archive]
 ```
 
-The client engine owns interactive, frame-by-frame simulation so the UI remains responsive. At scenario completion, the same command ledger is independently replayed by Java. The backend returns whether the server replay matches the client's first stress/degradation, recovery time, and final power deficit.
+The browser owns the interactive frame-by-frame simulation so the UI stays responsive. At scenario completion, the same command ledger is independently replayed by Java. The backend verifies the client's stress/degradation timing, recovery, and final deficit, then persists both the evidence and replay fingerprint.
 
 ## Scenario
 
 **Initial incident:** Substation S14 loses 180 MW.
 
-**Systems:**
-- Power
-- Telecom
-- Traffic
-- Water
-- Hospital
-- Emergency Services
+**Systems:** Power, Telecom, Traffic, Water, Hospital, Emergency Services.
 
 **Interventions:**
 1. Reroute Grid Capacity
@@ -93,18 +98,51 @@ The client engine owns interactive, frame-by-frame simulation so the UI remains 
 
 Shed Load also creates a delayed Telecom backup-depletion condition at 180s.
 
+## Run with Docker
+
+The quickest full-stack path starts PostgreSQL, Spring Boot, and the React/Nginx frontend together:
+
+```bash
+docker compose up --build
+```
+
+Open:
+
+- Simulator: `http://localhost:8081`
+- Incident archive: `http://localhost:8081/history.html`
+- API health: `http://localhost:8080/actuator/health`
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+
+PostgreSQL data is retained in the `cascadetrace-postgres` Docker volume.
+
 ## Run locally
 
-### 1. Backend
+### 1. Start PostgreSQL
+
+```bash
+docker compose up -d db
+```
+
+Default development connection:
+
+```text
+jdbc:postgresql://localhost:5432/cascadetrace
+username: cascadetrace
+password: cascadetrace
+```
+
+You can override it with `DATABASE_URL`, `DATABASE_USERNAME`, and `DATABASE_PASSWORD`.
+
+### 2. Backend
 
 ```bash
 cd backend
 mvn spring-boot:run
 ```
 
-The API starts at `http://localhost:8080`.
+The API starts at `http://localhost:8080` and Flyway applies the schema automatically.
 
-### 2. Frontend
+### 3. Frontend
 
 ```bash
 cd frontend
@@ -112,17 +150,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`.
-
-The frontend automatically uses `http://localhost:8080/api/v1` unless `VITE_API_BASE_URL` is set.
-
-## Run with Docker
-
-```bash
-docker compose up --build
-```
-
-Open `http://localhost:8081`.
+Open `http://localhost:5173` or `http://localhost:5173/history.html`.
 
 ## Verification
 
@@ -148,23 +176,25 @@ cd backend
 mvn test
 ```
 
-The Java tests assert the same four reference trajectories.
+Backend tests include deterministic replay tests and persistence/re-verification integration tests using H2 in PostgreSQL compatibility mode.
 
 ## REST API
 
-### Health
+### Existing runtime APIs
 
-`GET /api/v1/health`
+- `GET /api/v1/health`
+- `GET /api/v1/scenario`
+- `POST /api/v1/replay`
 
-### Scenario metadata
+`POST /api/v1/replay` independently verifies the client result and automatically records the completed run. A short deduplication window protects the archive from duplicate React StrictMode submissions.
 
-`GET /api/v1/scenario`
+### Persistent run APIs
 
-### Replay verification
+- `GET /api/v1/runs?page=0&size=20` — newest runs first
+- `GET /api/v1/runs/{id}` — run evidence + command ledger
+- `POST /api/v1/runs/{id}/verify` — replay and re-verify an archived run
 
-`POST /api/v1/replay`
-
-Example request:
+### Replay request example
 
 ```json
 {
@@ -181,14 +211,34 @@ Example request:
 }
 ```
 
-The API replays the command sequence and sets `verified=true` only when its deterministic summary matches the client summary. It also returns a deterministic `fingerprint` for the replay.
+## Persistence model
+
+```text
+simulation_runs
+├── UUID id
+├── scenario / timestamp
+├── client summary
+├── server replay outcome
+├── verification state
+├── SHA-256 replay fingerprint
+└── optimistic-lock version
+
+run_commands
+├── run_id
+├── simulation_second
+├── command_id
+├── optional report_id
+└── deterministic insertion_order
+```
+
+Database changes are versioned with Flyway rather than generated automatically by Hibernate (`ddl-auto=validate`).
 
 ## Repository layout
 
 ```text
 CascadeTrace/
-├── backend/                 # Java + Spring Boot verification API
-├── frontend/                # React + TypeScript simulator
+├── backend/                 # Java + Spring Boot + JPA + PostgreSQL
+├── frontend/                # React + TypeScript simulator + run archive
 ├── docs/                    # Architecture and API notes
 ├── .github/workflows/       # CI
 ├── docker-compose.yml
@@ -197,12 +247,15 @@ CascadeTrace/
 
 ## Design principle
 
-The simulator intentionally separates **presentation time** from **authoritative simulation time**: 420 deterministic engine seconds are played at 7× speed and displayed to the user as a 60-second incident. This keeps the tested scenario trajectories intact while making the interaction practical.
-
+The simulator separates **presentation time** from **authoritative simulation time**: 420 deterministic engine seconds are played at 7× speed and displayed as a 60-second incident. This keeps the tested trajectories intact while making the interaction practical.
 
 ## Engineering decisions
 
 See [`docs/architecture.md`](docs/architecture.md) for the runtime model and [`docs/adr/0001-deterministic-simulation.md`](docs/adr/0001-deterministic-simulation.md) for the deterministic-engine decision.
+
+## Maintainer
+
+**BackendArchitectX**
 
 ## License
 

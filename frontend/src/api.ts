@@ -25,6 +25,44 @@ export type ReplayEvaluation = {
   fingerprint: string
 }
 
+export type SimulationRunSummary = {
+  id: string
+  scenarioId: string
+  recordedAt: string
+  verified: boolean
+  finalDeficit: number
+  recoveryTime: number | null
+  cascadeEvents: number
+  decisionDebt: boolean
+  commandCount: number
+  fingerprint: string
+}
+
+export type SimulationRunPage = {
+  items: SimulationRunSummary[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+export type RunCommand = {
+  second: number
+  commandId: string
+  reportId: string | null
+  insertionOrder: number
+}
+
+export type SimulationRunDetail = {
+  id: string
+  scenarioId: string
+  recordedAt: string
+  commandCount: number
+  commands: RunCommand[]
+  clientSummary: ReplaySummary
+  serverEvaluation: ReplayEvaluation
+}
+
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8080/api/v1'
 
 async function request<T>(path: string, init?: RequestInit, timeoutMs = 1800): Promise<T> {
@@ -49,3 +87,11 @@ export const evaluateReplay = (commands: RecordedCommand[], clientSummary: Repla
   method: 'POST',
   body: JSON.stringify({ commands, clientSummary }),
 }, 4000)
+
+export const getRuns = (page = 0, size = 20) => request<SimulationRunPage>(`/runs?page=${page}&size=${size}`, undefined, 4000)
+
+export const getRun = (id: string) => request<SimulationRunDetail>(`/runs/${encodeURIComponent(id)}`, undefined, 4000)
+
+export const reverifyRun = (id: string) => request<SimulationRunDetail>(`/runs/${encodeURIComponent(id)}/verify`, {
+  method: 'POST',
+}, 5000)
