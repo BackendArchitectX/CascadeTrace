@@ -52,7 +52,6 @@ CascadeTrace is not an LLM dashboard. The simulation is deterministic, replayabl
 - Docker / Docker Compose
 - Nginx
 - GitHub Actions CI
-- Dependabot
 
 ## Architecture
 
