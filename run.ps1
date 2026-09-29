@@ -1,12 +1,24 @@
 param(
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$NoBuild,
+    [switch]$ResetData,
+    [switch]$OpenArchive
 )
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
+$appUrl = 'http://localhost:8081'
+$archiveUrl = 'http://localhost:8081/history.html'
+$healthUrl = 'http://localhost:8080/actuator/health'
+
 function Write-Step([string]$Message) {
     Write-Host "[CascadeTrace] $Message" -ForegroundColor Cyan
+}
+
+function Fail([string]$Message) {
+    Write-Host "[CascadeTrace] $Message" -ForegroundColor Red
+    exit 1
 }
 
 function Test-DockerReady {
@@ -14,9 +26,26 @@ function Test-DockerReady {
     return $LASTEXITCODE -eq 0
 }
 
-function Fail([string]$Message) {
-    Write-Host "[CascadeTrace] $Message" -ForegroundColor Red
-    exit 1
+function Test-Url([string]$Url) {
+    try {
+        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2
+        return $response.StatusCode -ge 200 -and $response.StatusCode -lt 500
+    } catch {
+        return $false
+    }
+}
+
+function Open-CascadeTrace {
+    if ($NoBrowser) { return }
+    Start-Process $(if ($OpenArchive) { $archiveUrl } else { $appUrl })
+}
+
+if ((Test-Url $appUrl) -and (Test-Url $healthUrl) -and -not $ResetData) {
+    Write-Host 'CascadeTrace is already running.' -ForegroundColor Green
+    Write-Host "Simulator : $appUrl"
+    Write-Host "Archive   : $archiveUrl"
+    Open-CascadeTrace
+    exit 0
 }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -49,26 +78,38 @@ if (-not (Test-DockerReady)) {
     }
 }
 
-Write-Step 'Building and starting PostgreSQL, Spring Boot, and React...'
-docker compose up --build -d
-if ($LASTEXITCODE -ne 0) {
-    Fail 'Docker Compose could not start CascadeTrace. Run "docker compose logs" for details.'
+if ($ResetData) {
+    Write-Step 'Resetting local containers and PostgreSQL volume...'
+    docker compose down -v --remove-orphans
+    if ($LASTEXITCODE -ne 0) {
+        Fail 'Could not reset the CascadeTrace Docker environment.'
+    }
 }
 
-Write-Step 'Waiting for the application to become ready...'
-$appUrl = 'http://localhost:8081'
+if ($NoBuild) {
+    Write-Step 'Starting PostgreSQL, Spring Boot, and React using existing images...'
+    docker compose up -d
+} else {
+    Write-Step 'Building and starting PostgreSQL, Spring Boot, and React...'
+    docker compose up --build -d
+}
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ''
+    docker compose ps
+    Write-Host ''
+    docker compose logs --tail 80
+    Fail 'Docker Compose could not start CascadeTrace. Diagnostics are shown above.'
+}
+
+Write-Step 'Waiting for PostgreSQL, backend, and frontend readiness...'
 $deadline = (Get-Date).AddMinutes(4)
 $ready = $false
 
 while ((Get-Date) -lt $deadline) {
-    try {
-        $response = Invoke-WebRequest -Uri $appUrl -UseBasicParsing -TimeoutSec 3
-        if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
-            $ready = $true
-            break
-        }
-    } catch {
-        # Containers may still be starting.
+    if ((Test-Url $appUrl) -and (Test-Url $healthUrl)) {
+        $ready = $true
+        break
     }
     Start-Sleep -Seconds 2
 }
@@ -76,18 +117,19 @@ while ((Get-Date) -lt $deadline) {
 if (-not $ready) {
     Write-Host ''
     docker compose ps
-    Fail 'Containers started, but the web application did not become ready in time.'
+    Write-Host ''
+    docker compose logs --tail 80
+    Fail 'Containers started, but CascadeTrace did not become healthy in time.'
 }
 
 Write-Host ''
 Write-Host 'CascadeTrace is running.' -ForegroundColor Green
 Write-Host "Simulator : $appUrl"
-Write-Host 'Archive   : http://localhost:8081/history.html'
+Write-Host "Archive   : $archiveUrl"
 Write-Host 'Swagger   : http://localhost:8080/swagger-ui.html'
-Write-Host 'API health: http://localhost:8080/actuator/health'
+Write-Host "API health: $healthUrl"
 Write-Host ''
 Write-Host 'To stop everything, double-click STOP-CASCADETRACE.bat.' -ForegroundColor DarkGray
+Write-Host 'Advanced: .\run.ps1 -NoBuild | -OpenArchive | -ResetData | -NoBrowser' -ForegroundColor DarkGray
 
-if (-not $NoBrowser) {
-    Start-Process $appUrl
-}
+Open-CascadeTrace
