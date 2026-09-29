@@ -1,5 +1,7 @@
 package io.cascadetrace.api;
 
+import io.cascadetrace.domain.ArchiveStatsResponse;
+import io.cascadetrace.domain.RunComparisonResponse;
 import io.cascadetrace.domain.SimulationRunDetailResponse;
 import io.cascadetrace.domain.SimulationRunPageResponse;
 import io.cascadetrace.service.SimulationRunService;
@@ -26,6 +28,18 @@ public class SimulationRunController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return service.list(page, size);
+    }
+
+    @GetMapping("/stats")
+    public ArchiveStatsResponse stats() {
+        return service.stats();
+    }
+
+    @GetMapping("/compare")
+    public RunComparisonResponse compare(
+            @RequestParam UUID left,
+            @RequestParam UUID right) {
+        return service.compare(left, right);
     }
 
     @GetMapping("/{id}")
