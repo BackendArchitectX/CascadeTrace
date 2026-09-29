@@ -90,26 +90,19 @@ public class SimulationRunService {
 
     @Transactional(readOnly = true)
     public ArchiveStatsResponse stats() {
-        List<SimulationRunEntity> runs = repository.findAll();
-        if (runs.isEmpty()) {
+        long totalRuns = repository.count();
+        if (totalRuns == 0) {
             return new ArchiveStatsResponse(0, 0, 0, 0, 0.0, null, 0.0);
         }
 
-        long verifiedRuns = runs.stream().filter(SimulationRunEntity::isVerified).count();
-        long recoveredRuns = runs.stream().filter(run -> run.getRecoveryTime() != null).count();
-        long decisionDebtRuns = runs.stream().filter(SimulationRunEntity::isDecisionDebt).count();
-        double averageFinalDeficit = runs.stream().mapToInt(SimulationRunEntity::getFinalDeficit).average().orElse(0.0);
-        Integer bestFinalDeficit = runs.stream().mapToInt(SimulationRunEntity::getFinalDeficit).min().orElse(0);
-        double averageCommandCount = runs.stream().mapToInt(SimulationRunEntity::getCommandCount).average().orElse(0.0);
-
         return new ArchiveStatsResponse(
-                runs.size(),
-                verifiedRuns,
-                recoveredRuns,
-                decisionDebtRuns,
-                averageFinalDeficit,
-                bestFinalDeficit,
-                averageCommandCount);
+                totalRuns,
+                repository.countByVerifiedTrue(),
+                repository.countByRecoveryTimeIsNotNull(),
+                repository.countByDecisionDebtTrue(),
+                valueOrZero(repository.averageFinalDeficit()),
+                repository.minimumFinalDeficit(),
+                valueOrZero(repository.averageCommandCount()));
     }
 
     @Transactional(readOnly = true)
@@ -235,5 +228,9 @@ public class SimulationRunService {
 
     private Integer nullableDelta(Integer right, Integer left) {
         return right == null || left == null ? null : right - left;
+    }
+
+    private double valueOrZero(Double value) {
+        return value == null ? 0.0 : value;
     }
 }
