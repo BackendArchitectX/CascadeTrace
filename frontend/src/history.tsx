@@ -13,6 +13,7 @@ import {
   type SimulationRunSummary,
 } from './api'
 import './history.css'
+import './history-intelligence.css'
 
 function formatDate(value: string) {
   const date = new Date(value)
