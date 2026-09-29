@@ -1,0 +1,6 @@
+import { replay, type RecordedCommand } from '../src/replay'
+import { deficit } from '../src/engine'
+let passed=0; const check=(c:unknown,l:string)=>{if(!c)throw new Error(`FAIL: ${l}`);passed++}
+const cmd=(commandId:string,insertionOrder=0):RecordedCommand=>({second:0,commandId,insertionOrder})
+const none=replay([]); const r=replay([cmd('reroute')]); const rm=replay([cmd('reroute'),cmd('mobile',1)]); const sh=replay([cmd('shed')]);
+check(none.state.ended,'none ended'); check(deficit(none.state)===120,'none deficit'); check(r.acceptedCommands.length===1,'reroute accepted'); check(deficit(r.state)===40,'reroute deficit'); check(rm.acceptedCommands.length===2,'two accepted'); check(deficit(rm.state)===0,'rm deficit'); check(rm.state.recoveryTime===40,'rm recovery'); check(sh.state.debtActive,'shed debt'); check(deficit(sh.state)===30,'shed deficit'); check(sh.state.log.some(e=>e.causeId==='telecom-backup-depletion'),'shed depletion'); const invalid=replay([cmd('nope')]); check(invalid.rejectedCommands.length===1,'invalid rejected'); check(invalid.acceptedCommands.length===0,'invalid not accepted'); check(invalid.state.ended,'invalid still completes'); console.log(`Replay assertions: ${passed}/13 PASS`)

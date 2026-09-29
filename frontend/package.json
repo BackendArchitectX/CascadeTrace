@@ -1,0 +1,28 @@
+{
+  "name": "cascadetrace-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "verify:engine": "tsx scripts/verify-engine.ts",
+    "verify:replay": "tsx scripts/verify-replay.ts",
+    "verify:causal": "tsx scripts/verify-causal.ts",
+    "verify:forkline": "tsx scripts/verify-forkline.ts",
+    "verify": "npm run verify:engine && npm run verify:replay && npm run verify:causal && npm run verify:forkline"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

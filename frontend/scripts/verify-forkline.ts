@@ -1,0 +1,6 @@
+import { forkline } from '../src/forkline'
+import type { RecordedCommand } from '../src/replay'
+let passed=0;const check=(c:unknown,l:string)=>{if(!c)throw new Error(`FAIL: ${l}`);passed++}
+const original:RecordedCommand[]=[{second:0,commandId:'reroute',insertionOrder:0}]
+const result=forkline({originalCommands:original,forkSecond:0,operation:{kind:'add',commandId:'mobile',insertionOrder:1}})
+check(result.branch.accepted,'branch accepted'); check(result.original.state.recoveryTime===undefined,'original no recovery'); check(result.comparison.recoveryTime===40,'branch recovers'); check(result.comparison.finalDeficit===0,'branch deficit'); check(result.original.state.values.Power.demand-result.original.state.values.Power.generation===40,'original deficit'); check(result.comparison.eventsPrevented.length>0,'events prevented'); check(Object.keys(result.comparison.statusMetricDeltas).length===6,'six systems compared'); check('reserve' in result.comparison.resourceDifferences,'resources compared'); check(result.comparison.firstDegraded===null,'no degraded'); check(result.comparison.firstStressed===null,'no stressed'); check(result.comparison.changedCausalChains.length>0,'divergence described'); console.log(`Forkline assertions: ${passed}/11 PASS`)
