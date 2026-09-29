@@ -1,55 +1,71 @@
 /* Live telemetry presentation layer. The deterministic simulation state remains authoritative. */
 .signal-map { isolation: isolate; }
-/* The original hero shipped with two decorative solid rays. The live SVG below now owns
+/* The original hero shipped with two decorative solid rays. The live SVG below owns
    all dependency rendering, so suppress those legacy rays to keep one visual language. */
 .signal-map > .signal-line { display: none; }
 .signal-live-links { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 0; }
 .signal-node, .incident-card { z-index: 2; }
-.hero-live-arrow { fill: #a7b2c0; transition: fill .18s ease; }
-.hero-live-edge { fill: none; stroke: #b7c1ce; stroke-width: 1.15; opacity: .52; vector-effect: non-scaling-stroke; transition: stroke .2s ease, stroke-width .2s ease, opacity .2s ease, filter .2s ease; }
-.hero-live-edge.active { stroke: var(--primary); stroke-width: 2; opacity: .95; stroke-dasharray: 8 6; animation: hero-edge-flow .75s linear infinite; filter: drop-shadow(0 0 3px rgba(88,108,245,.35)); }
-.hero-live-edge.threshold { stroke: var(--critical); stroke-width: 2.4; opacity: 1; stroke-dasharray: 8 6; animation: hero-threshold-flash .5s ease-in-out infinite alternate; filter: drop-shadow(0 0 5px rgba(239,95,99,.45)); }
+.hero-live-arrow { transition: fill .18s ease; }
+.hero-live-edge { fill: none; stroke: #c8d1de; stroke-width: 1.05; stroke-dasharray: 2 7; stroke-linecap: round; opacity: .34; vector-effect: non-scaling-stroke; transition: stroke .2s ease, stroke-width .2s ease, opacity .2s ease, filter .2s ease; }
+.hero-live-edge.active { stroke: var(--primary); stroke-width: 1.9; opacity: .9; stroke-dasharray: 8 7; animation: hero-edge-flow .78s linear infinite; filter: drop-shadow(0 0 2.5px rgba(88,108,245,.28)); }
+.hero-live-edge.active.telemetry-degraded { stroke-width: 2.05; opacity: .94; }
+.hero-live-edge.active.telemetry-critical { stroke-width: 2.15; opacity: 1; filter: drop-shadow(0 0 4px rgba(88,108,245,.38)); }
+.hero-live-edge.threshold { stroke: var(--critical); stroke-width: 2.2; stroke-dasharray: 6 5; opacity: 1; animation: hero-edge-flow .55s linear infinite, hero-threshold-flash .5s ease-in-out infinite alternate; filter: drop-shadow(0 0 5px rgba(239,95,99,.42)); }
 .city-signal.telemetry-live .signal-title .hero-kicker::after { content: '  ● STREAMING'; color: var(--primary); animation: live-dot 1s steps(2,end) infinite; }
 .city-signal.telemetry-live .incident-card { box-shadow: 0 .8rem 1.9rem rgba(88,108,245,.13); }
 .city-signal.telemetry-live .incident-card em { text-shadow: 0 0 1rem rgba(239,95,99,.2); }
 .city-signal.telemetry-live .signal-node:not(.status-normal) { animation: hero-node-breathe 1.15s ease-in-out infinite alternate; }
 
 .network { isolation: isolate; }
-.network-live-meter { position: absolute; top: .65rem; right: .7rem; z-index: 4; display: grid; gap: .15rem; min-width: 10.5rem; padding: .48rem .6rem; border: 1px solid var(--line); border-radius: .55rem; background: rgba(255,255,255,.94); box-shadow: 0 .45rem 1.2rem rgba(24,35,55,.08); pointer-events: none; }
-.network-live-meter b, .network-live-meter span { font-family: 'DM Mono', ui-monospace, monospace; letter-spacing: .055em; }
+.network-live-meter { position: absolute; top: .65rem; right: .7rem; z-index: 4; display: grid; gap: .15rem; min-width: 12.25rem; padding: .52rem .65rem; border: 1px solid var(--line); border-radius: .55rem; background: rgba(255,255,255,.95); box-shadow: 0 .45rem 1.2rem rgba(24,35,55,.08); pointer-events: none; backdrop-filter: blur(7px); }
+.network-live-meter b, .network-live-meter span, .network-live-meter small { font-family: 'DM Mono', ui-monospace, monospace; letter-spacing: .055em; }
 .network-live-meter b { color: var(--muted); font-size: .56rem; }
 .network-live-meter span { color: var(--ink-soft); font-size: .58rem; }
+.network-live-meter small { color: var(--muted); font-size: .51rem; line-height: 1.35; }
 .network-live-meter.is-live { border-color: rgba(88,108,245,.38); background: rgba(248,249,255,.96); }
 .network-live-meter.is-live b { color: var(--primary); }
 .network-live-meter.is-live b::before { content: '● '; animation: live-dot 1s steps(2,end) infinite; }
 .network-live-meter.is-ended { border-color: rgba(239,95,99,.28); }
+.network-live-meter[data-severity='stressed'] small { color: #9a6a00; }
+.network-live-meter[data-severity='degraded'] small { color: #bd5f2d; }
+.network-live-meter[data-severity='critical'] small { color: #b64c4c; font-weight: 700; }
 
-.network .active-edge .edge-path { stroke-width: .72; stroke-dasharray: 1.2 1.05; animation: telemetry-edge-flow .55s linear infinite; filter: drop-shadow(0 0 .35rem rgba(88,108,245,.42)); opacity: 1; }
-.network .threshold-edge .edge-path { stroke: var(--critical); stroke-width: .88; filter: drop-shadow(0 0 .45rem rgba(239,95,99,.48)); animation: threshold-edge-live .45s ease-in-out infinite alternate; }
+.network .active-edge .edge-path { stroke: var(--primary); stroke-width: .68; stroke-dasharray: 1.2 1.05; animation: telemetry-edge-flow .58s linear infinite; filter: drop-shadow(0 0 .28rem rgba(88,108,245,.32)); opacity: .95; }
+.network .active-edge.telemetry-degraded .edge-path { stroke-width: .76; filter: drop-shadow(0 0 .34rem rgba(88,108,245,.37)); }
+.network .active-edge.telemetry-critical .edge-path { stroke-width: .84; filter: drop-shadow(0 0 .42rem rgba(88,108,245,.44)); }
+.network .threshold-edge .edge-path,
+.network .recent-threshold .edge-path { stroke: var(--critical); stroke-width: .86; stroke-dasharray: 1 1; filter: drop-shadow(0 0 .42rem rgba(239,95,99,.42)); animation: telemetry-edge-flow .45s linear infinite, threshold-edge-live .45s ease-in-out infinite alternate; opacity: 1; }
 .network .edge-label { transition: fill .18s ease, opacity .18s ease; }
 .network .active-edge .edge-label { fill: var(--primary); opacity: 1; font-weight: 700; }
-.network .threshold-edge .edge-label { fill: var(--critical); opacity: 1; font-weight: 800; }
+.network .threshold-edge .edge-label,
+.network .recent-threshold .edge-label { fill: var(--critical); opacity: 1; font-weight: 800; }
 
-.node.sending-pressure { border-color: rgba(88,108,245,.55); box-shadow: 0 .5rem 1.45rem rgba(88,108,245,.12); }
+.node.sending-pressure { border-color: rgba(88,108,245,.5); box-shadow: 0 .5rem 1.35rem rgba(88,108,245,.1); }
 .node.receiving-pressure { animation: receiving-pressure 1s ease-in-out infinite alternate; }
 .node.receiving-pressure .node-status { box-shadow: 0 0 0 .28rem rgba(88,108,245,.11), 0 0 .65rem rgba(88,108,245,.35); }
-.pulse-chip.telemetry-pressure { border-color: rgba(88,108,245,.4); box-shadow: inset 0 0 0 1px rgba(88,108,245,.05); }
+.pulse-chip.telemetry-pressure { border-color: rgba(88,108,245,.36); box-shadow: inset 0 0 0 1px rgba(88,108,245,.05); }
+.telemetry-transition { animation: telemetry-status-change .75s ease-out !important; }
 .live-tag.live-now { position: relative; padding-left: .75rem; }
 .live-tag.live-now::before { content: ''; position: absolute; left: 0; top: 50%; width: .42rem; height: .42rem; transform: translateY(-50%); border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 .25rem rgba(88,108,245,.1); animation: live-dot 1s steps(2,end) infinite; }
+.legend-threshold { border-top: 2px dashed var(--critical); }
+.legend-threshold-label { color: var(--muted); }
 
 @keyframes telemetry-edge-flow { to { stroke-dashoffset: -4.5; } }
-@keyframes hero-edge-flow { to { stroke-dashoffset: -28; } }
-@keyframes hero-threshold-flash { from { opacity: .65; } to { opacity: 1; } }
-@keyframes threshold-edge-live { from { opacity: .62; } to { opacity: 1; } }
-@keyframes receiving-pressure { from { box-shadow: 0 .35rem .8rem rgba(88,108,245,.05); } to { box-shadow: 0 .55rem 1.5rem rgba(88,108,245,.19); } }
-@keyframes hero-node-breathe { from { transform: scale(.985); } to { transform: scale(1.015); } }
+@keyframes hero-edge-flow { to { stroke-dashoffset: -30; } }
+@keyframes hero-threshold-flash { from { opacity: .68; } to { opacity: 1; } }
+@keyframes threshold-edge-live { from { opacity: .7; } to { opacity: 1; } }
+@keyframes receiving-pressure { from { box-shadow: 0 .35rem .8rem rgba(88,108,245,.04); } to { box-shadow: 0 .55rem 1.45rem rgba(88,108,245,.16); } }
+@keyframes hero-node-breathe { from { transform: scale(.99); } to { transform: scale(1.01); } }
+@keyframes telemetry-status-change { 0% { box-shadow: 0 0 0 0 rgba(88,108,245,.38); } 35% { box-shadow: 0 0 0 .4rem rgba(88,108,245,.12), 0 .7rem 1.8rem rgba(88,108,245,.18); } 100% { box-shadow: 0 0 0 0 rgba(88,108,245,0); } }
 @keyframes live-dot { 50% { opacity: .28; } }
 
 .reduced-motion .hero-live-edge.active,
 .reduced-motion .hero-live-edge.threshold,
 .reduced-motion .network .active-edge .edge-path,
 .reduced-motion .network .threshold-edge .edge-path,
+.reduced-motion .network .recent-threshold .edge-path,
 .reduced-motion .node.receiving-pressure,
+.reduced-motion .telemetry-transition,
 .reduced-motion .city-signal.telemetry-live .signal-node,
 .reduced-motion .live-tag.live-now::before,
 .reduced-motion .network-live-meter.is-live b::before,
@@ -60,7 +76,9 @@
   .hero-live-edge.threshold,
   .network .active-edge .edge-path,
   .network .threshold-edge .edge-path,
+  .network .recent-threshold .edge-path,
   .node.receiving-pressure,
+  .telemetry-transition,
   .city-signal.telemetry-live .signal-node,
   .live-tag.live-now::before,
   .network-live-meter.is-live b::before,
@@ -68,6 +86,7 @@
 }
 
 @media (max-width: 50rem) {
-  .network-live-meter { top: .5rem; right: .5rem; min-width: 9rem; }
+  .network-live-meter { top: .5rem; right: .5rem; min-width: 9.5rem; }
   .network-live-meter span { font-size: .54rem; }
+  .network-live-meter small { font-size: .49rem; }
 }
