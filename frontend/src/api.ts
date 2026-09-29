@@ -5,6 +5,9 @@ export type BackendHealth = {
   service: string
   version: string
   deterministic: boolean
+  persistence?: string
+  scenarioRegistry?: boolean
+  evidenceSchema?: string
 }
 
 export type ReplaySummary = {
@@ -86,6 +89,31 @@ export type RunComparison = {
   commandsOnlyInRight: string[]
 }
 
+export type ScenarioManifest = {
+  id: string
+  key: string
+  title: string
+  status: string
+  operational: boolean
+  engineVersion: string
+  manifestHash: string
+  incident: string
+  authoritativeDurationSeconds: number
+  presentationDurationSeconds: number
+  incidentLossMw: number
+  systems: string[]
+  interventions: string[]
+  tags: string[]
+}
+
+export type EvidencePackage = {
+  schemaVersion: string
+  exportedAt: string
+  scenario: ScenarioManifest
+  run: SimulationRunDetail
+  evidenceHash: string
+}
+
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8080/api/v1'
 
 async function request<T>(path: string, init?: RequestInit, timeoutMs = 1800): Promise<T> {
@@ -111,11 +139,17 @@ export const evaluateReplay = (commands: RecordedCommand[], clientSummary: Repla
   body: JSON.stringify({ commands, clientSummary }),
 }, 4000)
 
+export const getScenarioCatalog = () => request<ScenarioManifest[]>('/scenarios', undefined, 3000)
+
+export const getScenarioManifest = (id: string) => request<ScenarioManifest>(`/scenarios/${encodeURIComponent(id)}`, undefined, 3000)
+
 export const getRuns = (page = 0, size = 20) => request<SimulationRunPage>(`/runs?page=${page}&size=${size}`, undefined, 4000)
 
 export const getRunStats = () => request<ArchiveStats>('/runs/stats', undefined, 4000)
 
 export const getRun = (id: string) => request<SimulationRunDetail>(`/runs/${encodeURIComponent(id)}`, undefined, 4000)
+
+export const getEvidencePackage = (id: string) => request<EvidencePackage>(`/runs/${encodeURIComponent(id)}/evidence`, undefined, 5000)
 
 export const compareRuns = (left: string, right: string) => request<RunComparison>(
   `/runs/compare?left=${encodeURIComponent(left)}&right=${encodeURIComponent(right)}`,

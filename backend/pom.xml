@@ -9,7 +9,7 @@
   </parent>
   <groupId>io.cascadetrace</groupId>
   <artifactId>cascadetrace-api</artifactId>
-  <version>1.2.0</version>
+  <version>1.3.0</version>
   <name>CascadeTrace API</name>
   <description>Persistent deterministic replay verification API for critical-infrastructure cascade simulations.</description>
   <properties>

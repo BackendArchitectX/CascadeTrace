@@ -14,8 +14,10 @@ public class HealthController {
         return Map.of(
                 "status", "UP",
                 "service", "cascadetrace-api",
-                "version", "1.2.0",
+                "version", "1.3.0",
                 "deterministic", true,
-                "persistence", "postgresql");
+                "persistence", "postgresql",
+                "scenarioRegistry", true,
+                "evidenceSchema", "1.0");
     }
 }

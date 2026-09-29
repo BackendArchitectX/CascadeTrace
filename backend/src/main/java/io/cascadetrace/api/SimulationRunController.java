@@ -1,9 +1,11 @@
 package io.cascadetrace.api;
 
 import io.cascadetrace.domain.ArchiveStatsResponse;
+import io.cascadetrace.domain.EvidencePackageResponse;
 import io.cascadetrace.domain.RunComparisonResponse;
 import io.cascadetrace.domain.SimulationRunDetailResponse;
 import io.cascadetrace.domain.SimulationRunPageResponse;
+import io.cascadetrace.service.EvidencePackageService;
 import io.cascadetrace.service.SimulationRunService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,9 +20,13 @@ import java.util.UUID;
 @RequestMapping("/api/v1/runs")
 public class SimulationRunController {
     private final SimulationRunService service;
+    private final EvidencePackageService evidencePackageService;
 
-    public SimulationRunController(SimulationRunService service) {
+    public SimulationRunController(
+            SimulationRunService service,
+            EvidencePackageService evidencePackageService) {
         this.service = service;
+        this.evidencePackageService = evidencePackageService;
     }
 
     @GetMapping
@@ -45,6 +51,11 @@ public class SimulationRunController {
     @GetMapping("/{id}")
     public SimulationRunDetailResponse get(@PathVariable UUID id) {
         return service.get(id);
+    }
+
+    @GetMapping("/{id}/evidence")
+    public EvidencePackageResponse evidence(@PathVariable UUID id) {
+        return evidencePackageService.export(id);
     }
 
     @PostMapping("/{id}/verify")

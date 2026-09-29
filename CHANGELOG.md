@@ -2,6 +2,18 @@
 
 All notable CascadeTrace changes are documented here.
 
+## 1.3.0 — Scenario Registry & Evidence Contracts
+
+- Added a versioned scenario registry with canonical IDs, operational status, tags, engine version, and deterministic scenario-manifest hashes.
+- Added `GET /api/v1/scenarios` and `GET /api/v1/scenarios/{id}` while preserving the existing CITY//01 compatibility endpoint.
+- Added server-generated evidence packages that bind scenario manifest, persisted run, command ledger, client summary, Java replay result, replay fingerprint, and a package-level SHA-256 integrity hash.
+- Updated Incident Intelligence export to download the backend-generated evidence contract instead of constructing the package only in the browser.
+- Added stable evidence-package integration coverage and scenario-registry unit coverage.
+- Added macOS/Linux one-command startup, shutdown, and environment-check scripts.
+- Added a Windows `CHECK-CASCADETRACE.bat` environment doctor.
+- Added CI validation for Docker Compose, Unix launcher syntax, and whitespace errors.
+- Expanded Makefile operational targets and aligned frontend/backend versions to 1.3.0.
+
 ## 1.2.0 — Incident Intelligence
 
 - Added archive-level statistics backed by PostgreSQL aggregate queries.

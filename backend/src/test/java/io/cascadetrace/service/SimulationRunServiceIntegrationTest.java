@@ -24,6 +24,9 @@ class SimulationRunServiceIntegrationTest {
     private ReplayVerificationService verificationService;
 
     @Autowired
+    private EvidencePackageService evidencePackageService;
+
+    @Autowired
     private SimulationRunRepository repository;
 
     @BeforeEach
@@ -92,5 +95,26 @@ class SimulationRunServiceIntegrationTest {
         assertThat(stats.averageFinalDeficit()).isEqualTo(80.0);
         assertThat(stats.bestFinalDeficit()).isEqualTo(40);
         assertThat(stats.averageCommandCount()).isEqualTo(0.5);
+    }
+
+    @Test
+    void exportsStableServerGeneratedEvidencePackage() {
+        ReplayRequest request = new ReplayRequest(
+                List.of(
+                        new RecordedCommand(0, "reroute", null, 0),
+                        new RecordedCommand(0, "mobile", null, 1)),
+                new ReplaySummary(null, null, 40, 0));
+
+        var saved = runService.record(request, verificationService.verify(request));
+        var first = evidencePackageService.export(saved.id());
+        var second = evidencePackageService.export(saved.id());
+
+        assertThat(first.schemaVersion()).isEqualTo("1.0");
+        assertThat(first.run().id()).isEqualTo(saved.id());
+        assertThat(first.run().serverEvaluation().verified()).isTrue();
+        assertThat(first.scenario().operational()).isTrue();
+        assertThat(first.scenario().manifestHash()).hasSize(64);
+        assertThat(first.evidenceHash()).hasSize(64);
+        assertThat(second.evidenceHash()).isEqualTo(first.evidenceHash());
     }
 }

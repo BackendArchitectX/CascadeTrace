@@ -25,8 +25,9 @@ CascadeTrace is not an LLM dashboard. The simulation is deterministic, replayabl
 - **Replay fingerprints** — each replay receives a deterministic SHA-256 fingerprint derived from the command ledger and server outcome.
 - **Server re-verification** — any archived run can be replayed again against the current deterministic Java engine.
 - **Run comparison** — select two archived incidents and compare outcome deltas plus command-ledger differences.
-- **Archive intelligence** — aggregate run count, verification count, average deficit, best deficit, recovery count, debt count, and average command count.
-- **Evidence export** — download a selected archived run as portable JSON and copy its replay fingerprint.
+- **Archive intelligence** — PostgreSQL-backed run count, verification count, average deficit, best deficit, recovery count, debt count, and average command count.
+- **Versioned scenario registry** — scenario metadata is exposed through a stable catalog contract with a deterministic manifest hash.
+- **Server evidence packages** — archived runs can be exported from the backend with the scenario manifest, exact command ledger, replay result, replay fingerprint, and a package-level SHA-256 integrity hash.
 - **Request traceability** — every API request receives an `X-Correlation-ID` and backend logs include the same correlation identifier.
 - **Operational metrics** — Spring Boot Actuator exposes counters for recorded, verified, mismatched, and re-verified runs.
 
@@ -57,7 +58,8 @@ CascadeTrace is not an LLM dashboard. The simulation is deterministic, replayabl
 - Docker / Docker Compose
 - Nginx
 - GitHub Actions CI
-- Windows one-click launcher
+- Windows one-click launcher and environment doctor
+- macOS/Linux one-command launcher and environment doctor
 
 ## Architecture
 
@@ -71,14 +73,33 @@ flowchart LR
     E --> A[After Action Review]
     R -->|command ledger + local summary| API[Spring Boot REST API]
     API --> J[Java Deterministic Replay Engine]
+    API --> S[Scenario Registry]
     J --> V[Verification Service]
     V --> P[(PostgreSQL)]
     P --> H[Run History / Incident Intelligence]
-    H --> X[Run Comparison + Evidence Export]
+    H --> X[Run Comparison]
+    H --> EP[Server Evidence Package]
     API --> M[Actuator / Metrics]
 ```
 
-The browser owns the interactive frame-by-frame simulation so the UI stays responsive. At scenario completion, the same command ledger is independently replayed by Java. The backend verifies the client's stress/degradation timing, recovery, and final deficit, then persists both the evidence and replay fingerprint.
+The browser owns the interactive frame-by-frame simulation so the UI stays responsive. At scenario completion, the same command ledger is independently replayed by Java. The backend verifies the client's stress/degradation timing, recovery, and final deficit, then persists the evidence and replay fingerprint.
+
+## Scenario registry
+
+CascadeTrace 1.3 introduces a registry boundary so scenario identity is no longer spread across controllers and UI code. CITY//01 remains the operational simulation, while the registry contract is ready for additional deterministic scenarios without changing archive or evidence APIs.
+
+Each manifest contains:
+
+- canonical scenario ID and key
+- display title and operational status
+- deterministic engine version
+- authoritative and presentation duration
+- incident loss
+- systems and interventions
+- scenario tags
+- deterministic SHA-256 manifest hash
+
+The manifest hash changes when authoritative scenario metadata changes, giving exported evidence a stable scenario identity.
 
 ## Scenario
 
@@ -115,23 +136,18 @@ After cloning the repository, double-click:
 RUN-CASCADETRACE.bat
 ```
 
-That single launcher:
-
-- starts Docker Desktop automatically when possible
-- detects when CascadeTrace is already running and opens it immediately
-- builds and starts PostgreSQL
-- builds and starts the Spring Boot backend
-- builds and starts the React/Nginx frontend
-- waits for both frontend and backend health before opening the browser
-- prints container logs automatically when startup fails
-- opens `http://localhost:8081` in your browser
-
-You do **not** need separate PowerShell windows for the frontend and backend.
+The launcher starts the entire stack, waits for frontend and backend readiness, and opens the simulator. You do **not** need separate PowerShell windows for frontend, backend, or PostgreSQL.
 
 To stop all services while preserving PostgreSQL data, double-click:
 
 ```text
 STOP-CASCADETRACE.bat
+```
+
+To diagnose the machine before starting, double-click:
+
+```text
+CHECK-CASCADETRACE.bat
 ```
 
 Advanced launcher options:
@@ -145,9 +161,24 @@ Advanced launcher options:
 
 `-ResetData` intentionally deletes the local CascadeTrace PostgreSQL Docker volume.
 
-## Run with Docker
+## One-step run on macOS / Linux
 
-The same full stack can also be started manually with one command:
+Prerequisites: Docker with Compose v2 and `curl`.
+
+```bash
+./check.sh
+./run.sh
+```
+
+Stop the stack with:
+
+```bash
+./stop.sh
+```
+
+The Unix launcher reuses an already-running healthy stack, waits for backend and frontend readiness, prints diagnostics on failure, and opens the simulator when a desktop opener is available.
+
+## Run with Docker
 
 ```bash
 docker compose up --build -d
@@ -188,8 +219,6 @@ cd backend
 mvn spring-boot:run
 ```
 
-The API starts at `http://localhost:8080` and Flyway applies the schema automatically.
-
 ### 3. Frontend
 
 ```bash
@@ -197,8 +226,6 @@ cd frontend
 npm install
 npm run dev
 ```
-
-Open `http://localhost:5173` or `http://localhost:5173/history.html`.
 
 ## Verification
 
@@ -224,17 +251,29 @@ cd backend
 mvn test
 ```
 
-Backend tests assert deterministic replay behavior, persistence/re-verification, archive statistics, and stored-run comparison using H2 in PostgreSQL compatibility mode.
+Backend tests cover deterministic replay, persistence/re-verification, archive statistics, stored-run comparison, scenario manifests, and stable server-generated evidence packages.
+
+Delivery contracts are also validated in CI:
+
+```bash
+docker compose config --quiet
+bash -n run.sh stop.sh check.sh
+```
 
 ## REST API
 
 ### Runtime APIs
 
 - `GET /api/v1/health`
-- `GET /api/v1/scenario`
+- `GET /api/v1/scenario` — compatibility endpoint for CITY//01 metadata
 - `POST /api/v1/replay`
 
-`POST /api/v1/replay` independently verifies the client result and automatically records the completed run. A short deduplication window protects the archive from duplicate React StrictMode submissions.
+### Scenario registry APIs
+
+- `GET /api/v1/scenarios` — scenario catalog
+- `GET /api/v1/scenarios/{id}` — versioned scenario manifest and manifest hash
+
+Both `CITY01` and `CITY//01` resolve to the same canonical scenario manifest.
 
 ### Persistent run APIs
 
@@ -242,26 +281,31 @@ Backend tests assert deterministic replay behavior, persistence/re-verification,
 - `GET /api/v1/runs/stats` — archive-level aggregate metrics
 - `GET /api/v1/runs/compare?left=<uuid>&right=<uuid>` — deterministic stored-run comparison; deltas are `RIGHT - LEFT`
 - `GET /api/v1/runs/{id}` — run evidence + command ledger
+- `GET /api/v1/runs/{id}/evidence` — server-generated evidence package with package-level integrity hash
 - `POST /api/v1/runs/{id}/verify` — replay and re-verify an archived run
 
 Every API response includes an `X-Correlation-ID`. Clients may provide their own correlation ID header; otherwise the backend generates one.
 
-### Replay request example
+## Evidence contract
 
-```json
-{
-  "commands": [
-    { "second": 0, "commandId": "reroute", "insertionOrder": 0 },
-    { "second": 0, "commandId": "mobile", "insertionOrder": 1 }
-  ],
-  "clientSummary": {
-    "firstStressed": null,
-    "firstDegraded": null,
-    "recoveryTime": 40,
-    "finalDeficit": 0
-  }
-}
+The archive no longer builds its export package only in the browser. `GET /api/v1/runs/{id}/evidence` binds together:
+
+```text
+Evidence package v1.0
+├── export timestamp
+├── versioned scenario manifest
+│   └── manifest SHA-256
+├── persisted run identity
+├── exact ordered command ledger
+├── client summary
+├── independent Java replay result
+├── replay fingerprint
+└── evidence-package SHA-256
 ```
+
+The evidence hash intentionally excludes the export timestamp, so repeated exports of the same stored evidence produce the same integrity hash.
+
+This is an integrity mechanism, not a digital signature or external attestation.
 
 ## Operational metrics
 
@@ -272,12 +316,6 @@ cascadetrace.runs.recorded
 cascadetrace.runs.verified
 cascadetrace.runs.mismatch
 cascadetrace.runs.reverified
-```
-
-Example:
-
-```text
-GET /actuator/metrics/cascadetrace.runs.recorded
 ```
 
 ## Persistence model
@@ -308,11 +346,16 @@ Database changes are versioned with Flyway rather than generated automatically b
 CascadeTrace/
 ├── backend/                 # Java + Spring Boot + JPA + PostgreSQL
 ├── frontend/                # React + TypeScript simulator + incident intelligence
-├── docs/                    # Architecture and API notes
+├── docs/                    # Architecture and ADRs
 ├── .github/workflows/       # CI only; no bot-authored source commits
 ├── RUN-CASCADETRACE.bat     # Windows one-click launcher
 ├── STOP-CASCADETRACE.bat    # Windows one-click shutdown
-├── run.ps1                  # Launcher implementation
+├── CHECK-CASCADETRACE.bat   # Windows environment doctor
+├── run.ps1                  # Windows launcher implementation
+├── doctor.ps1               # Windows diagnostics
+├── run.sh                   # macOS/Linux one-command launcher
+├── stop.sh                  # macOS/Linux shutdown
+├── check.sh                 # macOS/Linux environment doctor
 ├── docker-compose.yml
 └── README.md
 ```
@@ -323,7 +366,7 @@ The simulator separates **presentation time** from **authoritative simulation ti
 
 ## Engineering decisions
 
-See [`docs/architecture.md`](docs/architecture.md) for the runtime model and [`docs/adr/0001-deterministic-simulation.md`](docs/adr/0001-deterministic-simulation.md) for the deterministic-engine decision.
+See [`docs/architecture.md`](docs/architecture.md), [`docs/adr/0001-deterministic-simulation.md`](docs/adr/0001-deterministic-simulation.md), and [`docs/adr/0002-scenario-registry-and-evidence-contracts.md`](docs/adr/0002-scenario-registry-and-evidence-contracts.md).
 
 ## Maintainer
 

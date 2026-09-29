@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   compareRuns,
+  getEvidencePackage,
   getRun,
   getRunStats,
   getRuns,
@@ -45,6 +46,7 @@ function HistoryApp() {
   const [notice, setNotice] = useState('')
   const [verifyBusy, setVerifyBusy] = useState(false)
   const [compareBusy, setCompareBusy] = useState(false)
+  const [exportBusy, setExportBusy] = useState(false)
 
   const verifiedCount = useMemo(() => stats?.verifiedRuns ?? page?.items.filter((run) => run.verified).length ?? 0, [page, stats])
 
@@ -132,21 +134,27 @@ function HistoryApp() {
     setNotice('')
   }
 
-  function exportSelected() {
+  async function exportSelected() {
     if (!selected) return
-    const payload = JSON.stringify({
-      exportedAt: new Date().toISOString(),
-      source: 'CascadeTrace Incident Archive',
-      run: selected,
-    }, null, 2)
-    const blob = new Blob([payload], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `cascadetrace-${selected.scenarioId}-${shortId(selected.id)}.json`
-    link.click()
-    URL.revokeObjectURL(url)
-    setNotice('Evidence package exported as JSON.')
+    setExportBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const evidence = await getEvidencePackage(selected.id)
+      const payload = JSON.stringify(evidence, null, 2)
+      const blob = new Blob([payload], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `cascadetrace-evidence-${selected.scenarioId}-${shortId(selected.id)}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      setNotice(`Server evidence package exported. Integrity ${shortFingerprint(evidence.evidenceHash)}.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to export server evidence package.')
+    } finally {
+      setExportBusy(false)
+    }
   }
 
   async function copyFingerprint() {
@@ -218,7 +226,7 @@ function HistoryApp() {
             <span className={selected.serverEvaluation.verified ? 'verified-badge' : 'mismatch-badge'}>{selected.serverEvaluation.verified ? 'SERVER VERIFIED' : 'CLIENT / SERVER MISMATCH'}</span>
             <div className="detail-actions">
               <button onClick={toggleCompareSelected}>{selectedForCompare ? 'REMOVE COMPARE' : 'ADD TO COMPARE'}</button>
-              <button onClick={exportSelected}>EXPORT JSON</button>
+              <button onClick={() => void exportSelected()} disabled={exportBusy}>{exportBusy ? 'EXPORTING…' : 'EXPORT EVIDENCE'}</button>
               <button onClick={() => void verifySelected()} disabled={verifyBusy}>{verifyBusy ? 'VERIFYING…' : 'REVERIFY'}</button>
             </div>
           </div>
