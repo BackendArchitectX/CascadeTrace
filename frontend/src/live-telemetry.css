@@ -5,7 +5,6 @@
 .hero-live-arrow { fill: #a7b2c0; transition: fill .18s ease; }
 .hero-live-edge { fill: none; stroke: #b7c1ce; stroke-width: 1.15; opacity: .52; vector-effect: non-scaling-stroke; transition: stroke .2s ease, stroke-width .2s ease, opacity .2s ease, filter .2s ease; }
 .hero-live-edge.active { stroke: var(--primary); stroke-width: 2; opacity: .95; stroke-dasharray: 8 6; animation: hero-edge-flow .75s linear infinite; filter: drop-shadow(0 0 3px rgba(88,108,245,.35)); }
-.hero-live-edge.active + .hero-live-edge { transition-delay: .02s; }
 .hero-live-edge.threshold { stroke: var(--critical); stroke-width: 2.4; opacity: 1; animation: hero-threshold-flash .5s ease-in-out infinite alternate; filter: drop-shadow(0 0 5px rgba(239,95,99,.45)); }
 .city-signal.telemetry-live .signal-title .hero-kicker::after { content: '  ● STREAMING'; color: var(--primary); animation: live-dot 1s steps(2,end) infinite; }
 .city-signal.telemetry-live .incident-card { box-shadow: 0 .8rem 1.9rem rgba(88,108,245,.13); }
@@ -51,7 +50,8 @@
 .reduced-motion .city-signal.telemetry-live .signal-node,
 .reduced-motion .live-tag.live-now::before,
 .reduced-motion .network-live-meter.is-live b::before,
-.reduced-motion .city-signal.telemetry-live .signal-title .hero-kicker::after,
+.reduced-motion .city-signal.telemetry-live .signal-title .hero-kicker::after { animation: none !important; }
+
 @media (prefers-reduced-motion: reduce) {
   .hero-live-edge.active,
   .hero-live-edge.threshold,
