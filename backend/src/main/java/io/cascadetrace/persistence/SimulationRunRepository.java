@@ -15,6 +15,21 @@ public interface SimulationRunRepository extends JpaRepository<SimulationRunEnti
 
     Page<SimulationRunEntity> findAllByOrderByRecordedAtDesc(Pageable pageable);
 
+    long countByVerifiedTrue();
+
+    long countByRecoveryTimeIsNotNull();
+
+    long countByDecisionDebtTrue();
+
+    @Query("select avg(r.finalDeficit) from SimulationRunEntity r")
+    Double averageFinalDeficit();
+
+    @Query("select min(r.finalDeficit) from SimulationRunEntity r")
+    Integer minimumFinalDeficit();
+
+    @Query("select avg(r.commandCount) from SimulationRunEntity r")
+    Double averageCommandCount();
+
     @Query("select distinct r from SimulationRunEntity r left join fetch r.commands where r.id = :id")
     Optional<SimulationRunEntity> findDetailById(@Param("id") UUID id);
 }
